@@ -2,7 +2,7 @@
 
 A video player for framer with rudimentary controls (play, pause, restart) that supports any video format that is supported in HTML5. Easy to install and with customisable colors, you can drop this into any prototype.
 
-![A screenshot](framer-media-container/moduleTester_framer.png)
+![A screenshot](/framer-media-container/moduleTester_framer.png)
 
 ## Why this is useful
 The module is an extension of the Layer object, so you can do all the other stuff you usually do with a framer layer, like change it opacity, position, background color, etc. You can even animate the container, just like you would a normal layer.
