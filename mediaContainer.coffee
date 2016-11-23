@@ -1,37 +1,51 @@
 class exports.MediaContainer extends Layer
     constructor: (opts={}) ->
 
-        # color constants
+        # color and size constants
         INVISIBLE = "rgba(255, 255, 255, 0)"
         SKYBLUE =  "#46C3D4"
+        GREY = "#AAA"
+        WHITE = "#FFF"
         DEFAULT = "FAFAFA"
-        # font constants
-        opts.BASEFONT ?= 40
+        BASEFONT = 10
+        RATIO169 = 0.5625
+        # options for font
+        opts.fontMultiplier ?= 4
 
-        #options
+        # options for MediaContainer itself
         opts.name = "MediaContainer"
         opts.width ?= Screen.width
-        opts.height ?= Screen.width * 0.5625
+        opts.height ?= Screen.width * RATIO169
+
+        # options for colors
         opts.backgroundColor ?= INVISIBLE
         opts.controlColor ?= SKYBLUE
 
-        #slider constants
-        opts.KNOBSIZE ?= ( opts.height / 6 ) * .6
-        opts.SCRUBHEIGHT ?= (opts.height / 6 ) / 4
+        # options for slider
+        opts.knobSize ?= ( opts.height / 6 ) * .6
+        opts.knobRadius ?= "50%"
+        opts.knobColor ?= WHITE
+        opts.scrubHeight ?= (opts.height / 6 ) / 4
+        opts.scrubRadius ?= 25
+        opts.scrubBackgroundColor ?= GREY
 
+        #options for control bar
+        opts.controlBarFactor ?= 6
+
+        # add opts to parent
         super opts
 
-        #imports
-        FontAwesome = require 'FontAwesome'
+        # import dependency
+        @FontAwesome = require 'FontAwesome'
 
-        #make context available
+        #internal variables
         that = @
 
         #structure
         mControllerBar = new Layer
             name: "mControllerBar"
             width: @.width
-            height: @.height / 6
+            height: @.height / opts.controlBarFactor
             backgroundColor:'rgba(0,0,0,0.5)'
             clip: false
             parent: @
@@ -52,48 +66,81 @@ class exports.MediaContainer extends Layer
             x: mControllerBar.maxX - mControllerBar.height
             backgroundColor: INVISIBLE
 
-        mControllerPauseIcon = new FontAwesome
+        mControllerPauseIcon = new @FontAwesome
             name: "mControllerPauseIcon"
-            icon: "pause"
             parent: mControllerPlayPause
+            icon: "pause"
             color: opts.controlColor
-            fontSize: opts.BASEFONT
+            fontSize: opts.fontMultiplier * BASEFONT
             x: Align.center
             y: Align.center
             visible: false
 
-        mControllerPlayIcon = new FontAwesome
+        mControllerPlayIcon = new @FontAwesome
             name: "mControllerPlayIcon"
-            icon: "play"
             parent: mControllerPlayPause
+            icon: "play"
             color: opts.controlColor
-            fontSize: opts.BASEFONT
+            fontSize: opts.fontMultiplier * BASEFONT
             x: Align.center
             y: Align.center
 
-        mControllerRestartIcon = new FontAwesome
+        mControllerRestartIcon = new @FontAwesome
             name: "mControllerRestartIcon"
-            icon: "repeat"
             parent: mControllerRestart
+            icon: "repeat"
             color: opts.controlColor
-            fontSize: opts.BASEFONT
+            fontSize: opts.fontMultiplier * BASEFONT
             x: Align.center
             y: Align.center
 
-        mControllerScrubber = new SliderComponent
+        mControllerScrubber = new Layer
             name: "mControllerScrubber"
             parent: mControllerBar
             width: mControllerBar.width - ( mControllerBar.height * 3 )
-            height: opts.SCRUBHEIGHT
-            min: 0
-            max: 1
-            value: 0
+            height: opts.scrubHeight
+            backgroundColor: opts.scrubBackgroundColor
+            borderRadius: opts.scrubRadius
             x: Align.center
             y: Align.center
 
-        mControllerScrubber.knobSize = opts.KNOBSIZE
-        mControllerScrubber.fill.backgroundColor = opts.controlColor
-        mControllerScrubber.knob.draggable.momentum = false
+        mControllerScrubberFill = new Layer
+            name: "mControllerScrubberFill"
+            parent: mControllerScrubber
+            width: 0
+            height: mControllerScrubber.height
+            backgroundColor: opts.controlColor
+            borderRadius: opts.scrubRadius
+
+        mControllerScrubberKnob = new Layer
+            name: "mControllerScrubberKnob"
+            parent: mControllerScrubber
+            width: opts.knobSize
+            height: opts.knobSize
+            backgroundColor: opts.knobColor
+            style:
+                "border-radius": opts.knobRadius
+            x: 0
+            y: Align.center
+        #update x pos after creation
+        mControllerScrubberKnob.x = 0 - ( mControllerScrubberKnob.width / 2 )
+
+        # set up draggable options for the player knob controlling where it can go.
+        mControllerScrubberKnob.draggable.enabled = true
+        mControllerScrubberKnob.draggable.vertical = false
+        mControllerScrubberKnob.draggable.horizontal = true
+        mControllerScrubberKnob.draggable.constraints =
+            x: ( 0 - mControllerScrubberKnob.width / 2 )
+            y: mControllerScrubber.midY
+            width: 0
+            width: mControllerScrubber.width + ( mControllerScrubberKnob.width / 2 )
+        mControllerScrubberKnob.draggable.momentum = false
+        mControllerScrubberKnob.draggable.overdragScale = 0
+        mControllerScrubberKnob.draggable.overdrag = false
+        mControllerScrubberKnob.draggable.bounce = false
+        mControllerScrubberKnob.draggable.momentumOptions =
+            friction: 100
+            tolerance: 0
 
         mcMediaSource = new VideoLayer
             name: "mcMediaSource"
@@ -104,26 +151,30 @@ class exports.MediaContainer extends Layer
             style:
                 "z-index":"-1"
 
+        # now set up behaviours and register event listeners
+        # constantly update the scrubber when the player is playing
         mcMediaSource.player.addEventListener "timeupdate", ->
-            mControllerScrubber.value = mcMediaSource.player.currentTime / mcMediaSource.player.duration
+            mControllerScrubberFill.width = Utils.modulate(mcMediaSource.player.currentTime,[0,mcMediaSource.player.duration],[0,mControllerScrubber.width])
+            mControllerScrubberKnob.x = mControllerScrubberFill.width - (mControllerScrubberKnob.width / 2)
 
-        mcMediaSource.player.addEventListener "ended", ->
-            mControllerScrubber.value = 0
-            mControllerPlayIcon.visible = true
-            mControllerPauseIcon.visible = false
-            mcMediaSource.currentTime = 0
-            that.ended()
-
-        mControllerScrubber.knob.on Events.DragStart, ->
+        # update the time of video and scrubber fill when the knob is dragged
+        mControllerScrubberKnob.on Events.Move, (e) ->
             mcMediaSource.player.pause()
+            mControllerScrubberFill.width = Utils.modulate(mControllerScrubberKnob.midX,[0,mControllerScrubber.width],[0,mControllerScrubber.width])
+            mcMediaSource.player.currentTime = Utils.modulate(mControllerScrubberKnob.midX,[0,mControllerScrubber.width],[0,mcMediaSource.player.duration])
+
+        # reset the video when it  ends
+        mcMediaSource.player.addEventListener "ended", ->
+            mControllerScrubberKnob.x = 0 - ( mControllerScrubberKnob.width / 2 )
+            mControllerScrubberFill.width = 0
             mControllerPlayIcon.visible = true
             mControllerPauseIcon.visible = false
+            mControllerPlayIcon.scale = 1
+            mControllerPauseIcon.scaele = 1
+            mcMediaSource.player.currentTime = 0
+            that.onEnded()
 
-        mControllerScrubber.knob.on Events.DragEnd, ->
-            mcMediaSource.player.currentTime = mcMediaSource.player.duration * mControllerScrubber.value
-            mControllerPlayIcon.visible = true
-            mControllerPauseIcon.visible = false
-
+        # show or hide the approprite icon with an animation depending if the video is playing or paused when it's tapped
         mControllerPlayPause.on Events.Tap, ->
             if mcMediaSource.player.paused
                 mcMediaSource.player.play()
@@ -141,7 +192,8 @@ class exports.MediaContainer extends Layer
                     curve: "spring(300, 0, 0)"
                     properties:
                         scale: 1
-            else
+                that.onPlaying()
+            else if not mcMediaSource.player.paused
                 mcMediaSource.player.pause()
                 mControllerPauseIcon.animate
                     time: .3
@@ -157,7 +209,9 @@ class exports.MediaContainer extends Layer
                     curve: "spring(300, 0, 0)"
                     properties:
                         scale: 1
+                that.onPaused()
 
+        # reset UI and the make video start again on reset button tap
         mControllerRestart.on Events.Tap, ->
             mcMediaSource.player.pause()
             mControllerRestartIcon.scale = 1.2
@@ -167,22 +221,23 @@ class exports.MediaContainer extends Layer
                 properties:
                     scale: 1
             mcMediaSource.player.currentTime = 0
-            mControllerScrubber.value = 0
+            mControllerScrubberKnob.x = 0 - ( mControllerScrubberKnob.width / 2 )
+            mControllerScrubberFill.width = 0
             mControllerPlayIcon.visible = false
+            mControllerPlayIcon.scale = 1
             mControllerPauseIcon.visible = true
+            mControllerPauseIcon.scaele = 1
             mcMediaSource.player.play()
 
     setVideoSrc: (src) ->
         mcMediaSource = (@childrenWithName("mcMediaSource"))[0]
         mcMediaSource.video = src
+
     playVideo: () ->
         mcMediaSource = (@childrenWithName("mcMediaSource"))[0]
-        @setPlaying()
         mcMediaSource.player.play()
-    pauseVideo: () ->
-        mcMediaSource = (@childrenWithName("mcMediaSource"))[0]
-        @setPaused()
-        mcMediaSource.player.pause()
+        @setPlaying()
+
     getPlayIcon: () ->
         return (@childrenWithName("mControllerBar"))[0].childrenWithName("mControllerPlayPause")[0].childrenWithName("mControllerPlayIcon")[0]
     getPauseIcon: () ->
@@ -193,7 +248,21 @@ class exports.MediaContainer extends Layer
     setPaused: () ->
         (@getPauseIcon()).visible = false
         (@getPlayIcon()).visible = true
-    ended: () ->
+
+    pauseVideo: () ->
+        mcMediaSource = (@childrenWithName("mcMediaSource"))[0]
+        @setPaused()
+        mcMediaSource.player.pause()
+
+    onEnded: () ->
+        return
+    onPlaying: () ->
+        return
+    onPaused: () ->
         return
     setEndedCallBack: (callback) ->
-        @ended = callback
+        @onEnded = callback
+    setPlayCallBack: (callback) ->
+        @onPlaying = callback
+    setPauseCallBack: (callback) ->
+        @onPaused = callback
